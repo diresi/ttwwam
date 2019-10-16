@@ -31,7 +31,7 @@ It'll then show a primitive fullscreen GUI on the current monitor.
 Commands start with `:`. Try them, some of them even work, like `:info` or `:quit`.
 
 Virtual desktops (or containers, that's what they're called in the source code) can have any name, not starting with `:` though.
-That's reserverd for commands.
+That's reserved for commands.
 
 Create a new (virtual) desktop by entering any name (remember, don't start with `:`) and pressing `Enter`.
 If such a desktop exists it'll be displayed instead of the current one.
