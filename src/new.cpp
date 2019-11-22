@@ -169,6 +169,8 @@ struct monitor_t {
     HDC hdc;
     bool valid;
     MONITORINFOEX info;
+    DWORD width;
+    DWORD height;
 
     drect_t get_relative_window_rect(HWND hwnd)
     {
@@ -219,6 +221,13 @@ struct monitor_t {
     }
 };
 
+typedef map<HMONITOR, monitor_t> monitor_map_t;
+static monitor_map_t _monitors;
+
+typedef map<HMONITOR, HWND> tracker_t;
+static tracker_t _trackers;
+
+
 wstring get_window_title(HWND hwnd)
 {
     // win32 insists to add null terminator :/
@@ -252,9 +261,11 @@ monitor_t get_monitor_info(HMONITOR hmon)
 {
     monitor_t mon = {hmon};
     mon.info.cbSize = sizeof(MONITORINFOEX);
-    mon.valid = true;
-    if (!GetMonitorInfo(hmon, &mon.info)) {
-        mon.valid = false;
+    mon.valid = false;
+    if (GetMonitorInfo(hmon, &mon.info)) {
+        mon.valid = true;
+        mon.width = mon.rcMonitor.right - mon.rcMonitor.left;
+        mon.height = mon.rcMonitor.bottom - mon.rcMonitor.top;
     }
     return mon;
 }
@@ -320,13 +331,13 @@ struct container_t {
 typedef map<wstring, shared_ptr<container_t>> container_map_t;
 static container_map_t _containers;
 
-typedef map<HMONITOR, weak_ptr<container_t>> monitor_map_t;
-static monitor_map_t _monitors;
+// typedef map<HMONITOR, weak_ptr<container_t>> monitor_map_t;
+// static monitor_map_t _monitors;
 
 shared_ptr<container_t> current_container()
 {
     HMONITOR hmon = current_monitor_handle();
-    return _monitors[hmon].lock();
+    // return _monitors[hmon].lock();
 }
 
 void show_hide_window(HWND hwnd, bool show)
@@ -396,8 +407,6 @@ bool delete_container(shared_ptr<container_t> c)
     return true;
 }
 
-map<HMONITOR, HWND> _trackers;
-
 HWND create_tracking_window(const monitor_t& mon)
 {
     DWORD dwStyle = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_POPUP;
@@ -409,7 +418,8 @@ HWND create_tracking_window(const monitor_t& mon)
             dwStyle,
             mon.info.rcMonitor.left,
             mon.info.rcMonitor.top,
-            0, 0,
+            mon.width,
+            mon.height,
             NULL, NULL, NULL, NULL);
     wstring txt(L"tracking HMONITOR=");
     txt.append(_w(mon.hmon));
@@ -432,24 +442,24 @@ BOOL __stdcall EnumWindowProc(HWND hwnd, LPARAM lpar)
 
     monitor_t mon = get_monitor_info(hmon);
 
-    const auto tit = _trackers.find(hmon);
-    if (tit == _trackers.end()) {
-        _trackers[hmon] = create_tracking_window(mon);
-    }
+    // const auto tit = _trackers.find(hmon);
+    // if (tit == _trackers.end()) {
+    //     _trackers[hmon] = create_tracking_window(mon);
+    // }
 
-    monitor_map_t &mm = *reinterpret_cast<monitor_map_t*>(lpar);
-    shared_ptr<container_t> cont = mm[hmon].lock();
-    if (!cont) {
-        cont = new_container();
-        if (!cont) {
-            return TRUE;
-        }
-        mm[hmon] = cont;
-    }
+    // monitor_map_t &mm = *reinterpret_cast<monitor_map_t*>(lpar);
+    // shared_ptr<container_t> cont = mm[hmon].lock();
+    // if (!cont) {
+    //     cont = new_container();
+    //     if (!cont) {
+    //         return TRUE;
+    //     }
+    //     mm[hmon] = cont;
+    // }
 
-    drect_t r = mon.get_relative_window_rect(hwnd);
-    window_t w = {hwnd, r};
-    cont->wmap[hwnd] = w;
+    // drect_t r = mon.get_relative_window_rect(hwnd);
+    // window_t w = {hwnd, r};
+    // cont->wmap[hwnd] = w;
     return TRUE;
 }
 
@@ -470,49 +480,107 @@ void show_hide_current_container(bool show)
     show_hide_container(current_container(), show);
 }
 
-void scan_monitors()
+void update_trackers(tracker_t& trackers, monitor_map_t& monitors)
 {
     // trying to associate monitors after changes to the display configuration
     // were made. probably doesn't handle resolution-only changes.
-    for(auto it = _trackers.cbegin(); it != _trackers.end();) {
+    for(auto it = trackers.cbegin(); it != trackers.end();) {
         HMONITOR hmon = MonitorFromWindow(it->second, MONITOR_DEFAULTTONULL);
         if (hmon != it->first) {
             // monitor was removed or re-enumerated, let's check if we have a
             // container to hide
 
-            auto mit = _monitors.find(it->first);
-            if (mit != _monitors.end()) {
+            const auto mit = monitors.find(it->first);
+            if (mit != monitors.end()) {
                 if (hmon) {
                     // since we had a container displayed there, we move
                     // it to the new monitor (handle)
-                    _monitors[hmon] = mit->second;
+                    // _monitors[hmon] = mit->second;
                 } else {
                     // the monitor is gone, hide the container
-                    show_hide_container(mit->second.lock(), false);
+                    // show_hide_container(mit->second.lock(), false);
                 }
             }
 
             if (!hmon) {
                 // monitor was removed, destroy the tracker window
                 DestroyWindow(it->second);
+                trackers.erase(it++);
             }
-            // remove monitor and tracker entries
-            _monitors.erase(it->first);
-            _trackers.erase(it++);
         } else {
             ++it;
         }
     }
 
-    // should implicitly be covered by above loop
-    // for(auto it = _monitors.cbegin(); it != _monitors.cend();) {
-    //     if (!get_monitor_info(it->first).valid) {
-    //         _monitors.erase(it++);
-    //     } else {
-    //         ++it;
-    //     }
-    // }
+    // create trackers for new monitors
+    for(auto it = monitors.cbegin(); it != monitors.end(); ++it) {
+        if (trackers.find(it->first) == trackers.end()) {
+            trackers[it->first] = create_tracking_window(it->second);
+        }
+    }
 }
+
+BOOL __stdcall MonitorEnumProc(HMONITOR hmon, HDC, LPRECT pR, LPARAM lpar)
+{
+    monitor_map_t& mm = *reinterpret_cast<tracker_t*>(lpar);
+    monitor_t m = get_monitor_info(hmon);
+    if (m.valid) {
+        mm[hmon] = m;
+    }
+    return TRUE;
+}
+
+void scan_monitors()
+{
+    monitor_map_t tmp;
+    EnumDisplayMonitors(NULL, NULL, MonitorEnumProc, reinterpret_cast<LPARAM>(&tmp));
+    update_trackers(_trackers, tmp);
+    _monitors.swap(tmp);
+}
+
+// void scan_monitorsX()
+// {
+//     // trying to associate monitors after changes to the display configuration
+//     // were made. probably doesn't handle resolution-only changes.
+//     for(auto it = _trackers.cbegin(); it != _trackers.end();) {
+//         HMONITOR hmon = MonitorFromWindow(it->second, MONITOR_DEFAULTTONULL);
+//         if (hmon != it->first) {
+//             // monitor was removed or re-enumerated, let's check if we have a
+//             // container to hide
+
+//             auto mit = _monitors.find(it->first);
+//             if (mit != _monitors.end()) {
+//                 if (hmon) {
+//                     // since we had a container displayed there, we move
+//                     // it to the new monitor (handle)
+//                     _monitors[hmon] = mit->second;
+//                 } else {
+//                     // the monitor is gone, hide the container
+//                     show_hide_container(mit->second.lock(), false);
+//                 }
+//             }
+
+//             if (!hmon) {
+//                 // monitor was removed, destroy the tracker window
+//                 DestroyWindow(it->second);
+//             }
+//             // remove monitor and tracker entries
+//             _monitors.erase(it->first);
+//             _trackers.erase(it++);
+//         } else {
+//             ++it;
+//         }
+//     }
+
+//     // should implicitly be covered by above loop
+//     // for(auto it = _monitors.cbegin(); it != _monitors.cend();) {
+//     //     if (!get_monitor_info(it->first).valid) {
+//     //         _monitors.erase(it++);
+//     //     } else {
+//     //         ++it;
+//     //     }
+//     // }
+// }
 
 void scan_current_desktops()
 {

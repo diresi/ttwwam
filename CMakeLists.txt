@@ -1,7 +1,15 @@
 cmake_minimum_required (VERSION 3.12)
 
 project (ttwwam CXX)
-add_executable(ttwwam main.cpp)
+
+set (sources
+             src/cmd.cpp
+             src/log.cpp
+             src/main.cpp
+             src/wm.cpp
+             src/ui.cpp
+    )
+add_executable(ttwwam ${sources})
 IF (WIN32)
     set_target_properties(ttwwam PROPERTIES COMPILE_DEFINITIONS_DEBUG "_WINDOWS")
     set_target_properties(ttwwam PROPERTIES LINK_FLAGS_DEBUG "/SUBSYSTEM:WINDOWS")
