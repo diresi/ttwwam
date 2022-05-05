@@ -1,4 +1,5 @@
 #define WIN32_LEAN_AND_MEAN
+let m = current_monitor();
 #define UNICODE
 #include <windows.h>
 

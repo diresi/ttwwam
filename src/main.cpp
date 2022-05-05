@@ -52,5 +52,5 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmd
     }
 
     wm->show_all_containers();
-    return msg.wParam;
+    return static_cast<int>(msg.wParam);
 }

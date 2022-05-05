@@ -2,33 +2,280 @@
 #define UNICODE
 #include <windows.h>
 
-const LPCWSTR WC_NAME = L"ttwwam-main-cls";
-const LPCWSTR W_NAME = L"ttwwam-main";
+#include <memory>
 
-static HWND hwndMain;
-static HWND hwndInput;
-static WNDPROC defaultInputEditProc;
-static HWND hwndPreview;
-static HWND hwndLog;
+#include "log.h"
+#include "ui.h"
 
-const DWORD ID_EDITPREVIEW = 100;
-const DWORD ID_EDITLOG = 101;
-const DWORD ID_EDITINPUT = 102;
-const DWORD INPUTHEIGHT = 25;
-const DWORD EN_USER_BASE = 0x8000;
-const DWORD EN_USER_CONFIRM = EN_USER_BASE + 1;
-const DWORD EN_USER_ABORT = EN_USER_BASE + 2;
+// fwd declaration(s)
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK InputEditProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-LRESULT CALLBACK WindowProc(
-  _In_ HWND   hwnd,
-  _In_ UINT   uMsg,
-  _In_ WPARAM wParam,
-  _In_ LPARAM lParam
-)
+sp_ui_t init_ui(HINSTANCE hInstance)
 {
+    auto ui = std::make_shared<UserInterface>(hInstance);
+    if(!ui->register_window_class()) {
+        log_fatal_error(L"failed to register window class");
+        return sp_ui_t();
+    }
+    if(!ui->create_main_window()) {
+        log_fatal_error(L"failed create main window");
+        return sp_ui_t();
+    }
+}
+
+void show_hide_window(HWND hwnd, bool show)
+{
+    ShowWindow(hwnd, show ? SW_SHOW : SW_HIDE);
+}
+
+class _UserInterface
+    : public std::enable_shared_from_this<_UserInterface>
+{
+    private:
+        HINSTANCE _hInstance;
+        WNDCLASSEX _wce;
+        ATOM _wc;
+        HWND _hwndMain;
+        HWND _hwndInput;
+        HWND _hwndPreview;
+        HWND _hwndLog;
+        WNDPROC _defaultInputEditProc;
+
+    public:
+        const LPCWSTR WC_NAME = L"ttwwam-main-cls";
+        const LPCWSTR W_NAME = L"ttwwam-main";
+        const DWORD ID_EDITPREVIEW = 100;
+        const DWORD ID_EDITLOG = 101;
+        const DWORD ID_EDITINPUT = 102;
+        const DWORD INPUTHEIGHT = 25;
+        const DWORD EN_USER_BASE = 0x8000;
+        const DWORD EN_USER_CONFIRM = EN_USER_BASE + 1;
+        const DWORD EN_USER_ABORT = EN_USER_BASE + 2;
+
+
+    public:
+        _UserInterface(HINSTANCE hInstance);
+
+        bool register_window_class();
+        bool create_main_window();
+        bool create_user_interface(HWND);
+
+        LRESULT onInputEditMessage(HWND, UINT, WPARAM, LPARAM) const;
+
+        void show_main_window(bool) const;
+};
+
+typedef std::shared_ptr<_UserInterface> sp__ui_t;
+
+_UserInterface::_UserInterface(HINSTANCE hInstance)
+    : _hInstance(hInstance)
+{}
+
+bool _UserInterface::register_window_class()
+{
+    _wce = {
+        sizeof(_wce),
+        0,
+        WindowProc,
+        0,
+        0,
+        _hInstance,
+        LoadIcon(NULL, IDI_APPLICATION),
+        LoadCursor(NULL, IDC_ARROW),
+        reinterpret_cast<HBRUSH>(GetStockObject(DKGRAY_BRUSH)),
+        NULL,
+        WC_NAME,
+        NULL,
+    };
+
+    _wc = RegisterClassEx(&_wce);
+    return !!_wc;
+}
+
+bool _UserInterface::create_main_window()
+{
+    DWORD dwStyle = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_POPUP;
+    DWORD dwExStyle = WS_EX_APPWINDOW | WS_EX_TOPMOST;
+    _hwndMain = CreateWindowEx(
+            dwExStyle,
+            MAKEINTATOM(_wc),
+            W_NAME,
+            dwStyle,
+            0, 0, 800, 600,
+            NULL, NULL, NULL, NULL);
+
+    SetWindowLongPtr(_hwndMain, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&shared_from_this()));
+
+    return !!_hwndMain;
+}
+
+bool _UserInterface::create_user_interface(HWND hwnd)
+{
+    _hwndInput = CreateWindowEx(
+            0, L"EDIT", NULL,
+            WS_CHILD | WS_VISIBLE | ES_LEFT | ES_AUTOVSCROLL,
+            0, 0, 0, 0,
+            hwnd,
+            reinterpret_cast<HMENU>(ID_EDITINPUT),
+            _hInstance,
+            NULL);
+
+    _defaultInputEditProc = reinterpret_cast<WNDPROC>(
+            SetWindowLongPtr(
+                _hwndInput,
+                GWLP_WNDPROC,
+                reinterpret_cast<LONG_PTR>(InputEditProc)));
+
+    _hwndPreview = CreateWindowEx(
+            0, L"EDIT", NULL,
+            WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_LEFT | ES_MULTILINE | ES_AUTOVSCROLL,
+            0, 0, 0, 0,
+            hwnd,
+            reinterpret_cast<HMENU>(ID_EDITPREVIEW),
+            _hInstance,
+            NULL);
+    SendMessage(_hwndPreview, EM_SETREADONLY, TRUE, 0);
+
+    _hwndLog = CreateWindowEx(
+            0, L"EDIT", NULL,
+            WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_LEFT | ES_MULTILINE | ES_AUTOVSCROLL,
+            0, 0, 0, 0,
+            hwnd,
+            reinterpret_cast<HMENU>(ID_EDITLOG),
+            _hInstance,
+            NULL);
+    SendMessage(_hwndLog, EM_SETREADONLY, TRUE, 0);
+
+}
+
+LRESULT _UserInterface::onInputEditMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) const
+{
+    switch (msg)
+    {
+        case WM_CHAR:
+            {
+                if (wParam == 1) {
+                    // CTRL+A
+                    SendMessage(hwnd, EM_SETSEL, 0, -1);
+                    return 0;
+                }
+
+                DWORD cmd = 0;
+                if (wParam == VK_ESCAPE) {
+                    cmd = EN_USER_ABORT;
+                } else if (wParam == VK_RETURN) {
+                    cmd = EN_USER_CONFIRM;
+                }
+                if (cmd) {
+                    SendMessage(
+                            _hwndMain,
+                            WM_COMMAND,
+                            MAKEWPARAM(ID_EDITINPUT, cmd),
+                            reinterpret_cast<LPARAM>(hwnd));
+                    return 0;
+                }
+            }
+
+        default:
+            return CallWindowProc(_defaultInputEditProc, hwnd, msg, wParam, lParam);
+    }
+    return 0;
+}
+
+
+void _UserInterface::show_main_window(bool show) const
+{
+    show_hide_window(_hwndMain, show);
+    if (!show) {
+        return false;
+    }
+
+    // scan_current_desktops();
+
+    monitor_t m = current_monitor();
+    log_debug(m.tostr());
+    MoveWindow(
+            hwnd,
+            m.info.rcMonitor.left,
+            m.info.rcMonitor.top,
+            m.info.rcMonitor.right - m.info.rcMonitor.left,
+            m.info.rcMonitor.bottom - m.info.rcMonitor.top,
+            FALSE);
+    SetWindowText(hwndInput, L"");
+    SetFocus(hwndInput);
+    SetForegroundWindow(hwnd);
+
+    return true;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+UserInterface::UserInterface(HINSTANCE hInstance)
+    : _p(std::make_unique<_UserInterface>(hInstance))
+{}
+
+bool UserInterface::register_window_class()
+{
+    return _p->register_window_class();
+}
+
+bool UserInterface::create_main_window()
+{
+    return _p->create_main_window();
+}
+
+
+
+
+bool handle_hotkey(HWND hwnd, SHORT modifiers, SHORT keycode) {
+    // for(const auto& cmd : _commands) {
+    //     if (!cmd.second.hotkey.first) {
+    //         continue;
+    //     }
+    //     const hotkey_t& hk = cmd.second.hotkey.second;
+    //     SHORT mod = hk.modifier & ~MOD_NOREPEAT;
+    //     if ((mod == modifiers) && (hk.keycode == keycode)) {
+    //         return run_command(hwnd, cmd.first);
+    //     }
+    // }
+    return false;
+}
+
+void clear_preview()
+{
+    int index = GetWindowTextLength(hwndPreview);
+    SendMessage(hwndPreview, EM_SETSEL, 0, index);
+    SendMessage(hwndPreview, EM_REPLACESEL, 0, (LPARAM) 0);
+}
+
+wstring get_window_title(HWND hwnd)
+{
+    // win32 insists to add null terminator :/
+    int l = GetWindowTextLength(hwnd) + sizeof(TCHAR);
+    vector<TCHAR> v;
+    v.resize(l);
+    GetWindowText(hwnd, &v[0], l);
+    wstring title(v.begin(), v.end());
+    title.erase(title.find(L'\0'));
+    return title;
+}
+
+wstring get_edit_text(HWND hwnd)
+{
+    return get_window_title(hwnd);
+}
+
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    sp__ui_t ui = dynamic_cast<sp__ui_t>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
+    if (!ui) {
+        return DefWindowProc(hwnd, uMsg, wParam, lParam);
+    }
+
     switch(uMsg) {
         case WM_CREATE:
-            create_gui(hwnd);
+            ui->create_user_interface(hwnd);
             return 0;
 
         case WM_SIZE:
@@ -84,195 +331,12 @@ LRESULT CALLBACK WindowProc(
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
-
-LRESULT CALLBACK myInputEditProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK InputEditProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-    switch (msg)
-    {
-        case WM_CHAR:
-            {
-                if (wParam == 1) {
-                    // CTRL+A
-                    SendMessage(hwnd, EM_SETSEL, 0, -1);
-                    return 0;
-                }
-
-                DWORD cmd = 0;
-                if (wParam == VK_ESCAPE) {
-                    cmd = EN_USER_ABORT;
-                } else if (wParam == VK_RETURN) {
-                    cmd = EN_USER_CONFIRM;
-                }
-                if (cmd) {
-                    SendMessage(
-                            hwndMain,
-                            WM_COMMAND,
-                            MAKEWPARAM(ID_EDITINPUT, cmd),
-                            reinterpret_cast<LPARAM>(hwnd));
-                    return 0;
-                }
-            }
-
-        default:
-            return CallWindowProc(defaultInputEditProc, hwnd, msg, wParam, lParam);
-    }
-    return 0;
-}
-
-
-void create_gui(HWND hwnd)
-{
-    hwndInput = CreateWindowEx(
-            0, L"EDIT", NULL,
-            WS_CHILD | WS_VISIBLE | ES_LEFT | ES_AUTOVSCROLL,
-            0, 0, 0, 0,
-            hwnd,
-            reinterpret_cast<HMENU>(ID_EDITINPUT),
-            reinterpret_cast<HINSTANCE>(GetWindowLong(hwnd, GWL_HINSTANCE)),
-            NULL);
-    defaultInputEditProc = reinterpret_cast<WNDPROC>(
-            SetWindowLongPtr(
-                hwndInput,
-                GWLP_WNDPROC,
-                reinterpret_cast<LONG_PTR>(myInputEditProc)));
-
-    hwndPreview = CreateWindowEx(
-            0, L"EDIT", NULL,
-            WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_LEFT | ES_MULTILINE | ES_AUTOVSCROLL,
-            0, 0, 0, 0,
-            hwnd,
-            reinterpret_cast<HMENU>(ID_EDITPREVIEW),
-            reinterpret_cast<HINSTANCE>(GetWindowLong(hwnd, GWL_HINSTANCE)),
-            NULL);
-    SendMessage(hwndPreview, EM_SETREADONLY, TRUE, 0);
-
-    hwndLog = CreateWindowEx(
-            0, L"EDIT", NULL,
-            WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_LEFT | ES_MULTILINE | ES_AUTOVSCROLL,
-            0, 0, 0, 0,
-            hwnd,
-            reinterpret_cast<HMENU>(ID_EDITLOG),
-            reinterpret_cast<HINSTANCE>(GetWindowLong(hwnd, GWL_HINSTANCE)),
-            NULL);
-    SendMessage(hwndLog, EM_SETREADONLY, TRUE, 0);
-
-}
-
-
-bool handle_hotkey(HWND hwnd, SHORT modifiers, SHORT keycode) {
-    for(const auto& cmd : _commands) {
-        if (!cmd.second.hotkey.first) {
-            continue;
-        }
-        const hotkey_t& hk = cmd.second.hotkey.second;
-        SHORT mod = hk.modifier & ~MOD_NOREPEAT;
-        if ((mod == modifiers) && (hk.keycode == keycode)) {
-            return run_command(hwnd, cmd.first);
-        }
-    }
-    return false;
-}
-
-bool show_main_window(HWND hwnd, bool show)
-{
-    show_hide_window(hwnd, show);
-    if (!show) {
-        return false;
+    sp__ui_t ui = dynamic_cast<sp__ui_t>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
+    if (!ui) {
+        return DefWindowProc(hwnd, uMsg, wParam, lParam);
     }
 
-    scan_current_desktops();
-
-    monitor_t m = current_monitor();
-    log_debug(m.tostr());
-    MoveWindow(
-            hwnd,
-            m.info.rcMonitor.left,
-            m.info.rcMonitor.top,
-            m.info.rcMonitor.right - m.info.rcMonitor.left,
-            m.info.rcMonitor.bottom - m.info.rcMonitor.top,
-            FALSE);
-    SetWindowText(hwndInput, L"");
-    SetFocus(hwndInput);
-    SetForegroundWindow(hwnd);
-
-    return true;
-}
-
-
-void clear_preview()
-{
-    int index = GetWindowTextLength(hwndPreview);
-    SendMessage(hwndPreview, EM_SETSEL, 0, index);
-    SendMessage(hwndPreview, EM_REPLACESEL, 0, (LPARAM) 0);
-}
-
-wstring get_window_title(HWND hwnd)
-{
-    // win32 insists to add null terminator :/
-    int l = GetWindowTextLength(hwnd) + sizeof(TCHAR);
-    vector<TCHAR> v;
-    v.resize(l);
-    GetWindowText(hwnd, &v[0], l);
-    wstring title(v.begin(), v.end());
-    title.erase(title.find(L'\0'));
-    return title;
-}
-
-wstring get_edit_text(HWND hwnd)
-{
-    return get_window_title(hwnd);
-}
-
-void show_hide_window(HWND hwnd, bool show)
-{
-    ShowWindow(hwnd, show ? SW_SHOW : SW_HIDE);
-}
-
-bool init_ui(HINSTANCE hInstance) {
-    WNDCLASSEX wce = {
-        sizeof(wce),
-        0,
-        WindowProc,
-        0,
-        0,
-        hInstance,
-        LoadIcon(NULL, IDI_APPLICATION),
-        LoadCursor(NULL, IDC_ARROW),
-        reinterpret_cast<HBRUSH>(GetStockObject(DKGRAY_BRUSH)),
-        NULL,
-        WC_NAME,
-        NULL,
-    };
-
-    ATOM wc = RegisterClassEx(&wce);
-    if (!wc) {
-        log_error(L"failed to register window class");
-        return false;
-    }
-
-    DWORD dwStyle = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_POPUP;
-    DWORD dwExStyle = WS_EX_APPWINDOW | WS_EX_TOPMOST;
-    hwndMain = CreateWindowEx(
-            dwExStyle,
-            MAKEINTATOM(wc),
-            W_NAME,
-            dwStyle,
-            0, 0, 800, 600,
-            NULL, NULL, NULL, NULL);
-    if (!hwndMain) {
-        MessageBox(NULL, get_last_error_message().c_str(), L"", MB_OK);
-        return false;
-    }
-
-    log_debug(L"main window created");
-    return true;
-}
-
-sp_ui_t init_ui(HINSTANCE hInstance)
-{
-    return std::make_shared<UI>(hInstance);
-}
-
-UserInterface::UserInterface(HINSTANCE hInstance)
-{
+    return ui->onInputEditMessage(hwnd, msg, wParam, lParam);
 }

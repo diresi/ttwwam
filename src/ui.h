@@ -3,8 +3,18 @@
 
 #include <windows.h>
 
+#include <memory>
+
+class _UserInterface;
+
 class UserInterface {
-    UserInterface(HINSTANCE hInstance);
+    private:
+        std::unique_ptr<_UserInterface> _p;
+
+    public:
+        UserInterface(HINSTANCE hInstance);
+        bool register_window_class();
+        bool create_main_window();
 };
 
 typedef std::shared_ptr<UserInterface> sp_ui_t;
