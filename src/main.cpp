@@ -898,7 +898,7 @@ void create_gui(HWND hwnd)
             0, 0, 0, 0,
             hwnd,
             reinterpret_cast<HMENU>(ID_EDITINPUT),
-            reinterpret_cast<HINSTANCE>(GetWindowLong(hwnd, GWL_HINSTANCE)),
+            reinterpret_cast<HINSTANCE>(GetWindowLongPtr(hwnd, GWLP_HINSTANCE)),
             NULL);
     defaultInputEditProc = reinterpret_cast<WNDPROC>(
             SetWindowLongPtr(
@@ -912,7 +912,7 @@ void create_gui(HWND hwnd)
             0, 0, 0, 0,
             hwnd,
             reinterpret_cast<HMENU>(ID_EDITPREVIEW),
-            reinterpret_cast<HINSTANCE>(GetWindowLong(hwnd, GWL_HINSTANCE)),
+            reinterpret_cast<HINSTANCE>(GetWindowLongPtr(hwnd, GWLP_HINSTANCE)),
             NULL);
     SendMessage(hwndPreview, EM_SETREADONLY, TRUE, 0);
 
@@ -922,7 +922,7 @@ void create_gui(HWND hwnd)
             0, 0, 0, 0,
             hwnd,
             reinterpret_cast<HMENU>(ID_EDITLOG),
-            reinterpret_cast<HINSTANCE>(GetWindowLong(hwnd, GWL_HINSTANCE)),
+            reinterpret_cast<HINSTANCE>(GetWindowLongPtr(hwnd, GWLP_HINSTANCE)),
             NULL);
     SendMessage(hwndLog, EM_SETREADONLY, TRUE, 0);
 
