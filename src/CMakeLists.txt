@@ -1,7 +1,17 @@
-cmake_minimum_required (VERSION 3.12)
+cmake_minimum_required (VERSION 3.21)
 
 project (ttwwam CXX)
-add_executable(ttwwam src/main.cpp)
+
+add_subdirectory(lib)
+
+add_executable(ttwwam main.cpp)
+target_link_libraries(ttwwam libttwwam)
+
+add_custom_command(TARGET ttwwam POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:ttwwam> $<TARGET_FILE_DIR:ttwwam>
+  COMMAND_EXPAND_LISTS
+)
+
 IF (WIN32)
     set_target_properties(ttwwam PROPERTIES COMPILE_DEFINITIONS_DEBUG "_WINDOWS")
     set_target_properties(ttwwam PROPERTIES LINK_FLAGS_DEBUG "/SUBSYSTEM:WINDOWS")
