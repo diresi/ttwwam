@@ -7,10 +7,10 @@ add_subdirectory(lib)
 add_executable(ttwwam main.cpp)
 target_link_libraries(ttwwam libttwwam)
 
-add_custom_command(TARGET ttwwam POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:ttwwam> $<TARGET_FILE_DIR:ttwwam>
-  COMMAND_EXPAND_LISTS
-)
+# add_custom_command(TARGET ttwwam POST_BUILD
+#   COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:ttwwam> $<TARGET_FILE_DIR:ttwwam>
+#   COMMAND_EXPAND_LISTS
+# )
 
 IF (WIN32)
     set_target_properties(ttwwam PROPERTIES COMPILE_DEFINITIONS_DEBUG "_WINDOWS")

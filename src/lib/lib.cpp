@@ -601,12 +601,15 @@ bool show_main_window(HWND hwnd, bool show)
 
     monitor_t m = current_monitor();
     log_debug(m.tostr());
+
+    const int W = (m.info.rcMonitor.right - m.info.rcMonitor.left) / 2;
+    const int H = (m.info.rcMonitor.bottom - m.info.rcMonitor.top) / 2;
     MoveWindow(
             hwnd,
-            m.info.rcMonitor.left,
-            m.info.rcMonitor.top,
-            m.info.rcMonitor.right - m.info.rcMonitor.left,
-            m.info.rcMonitor.bottom - m.info.rcMonitor.top,
+            m.info.rcMonitor.right - W,
+            m.info.rcMonitor.bottom - H,
+            W,
+            H,
             FALSE);
     SetWindowText(hwndInput, L"");
     SetFocus(hwndInput);
@@ -996,48 +999,48 @@ LRESULT CALLBACK WindowProc(
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
-LRESULT CALLBACK MyShellProc(int nCode, WPARAM wParam, LPARAM lParam)
-{
-    switch (nCode) {
-        case HSHELL_ACCESSIBILITYSTATE:
-            log_info(L"HSHELL_ACCESSIBILITYSTATE");
-            break;
-        case HSHELL_ACTIVATESHELLWINDOW:
-            log_info(L"HSHELL_ACTIVATESHELLWINDOW");
-            break;
-        case HSHELL_APPCOMMAND:
-            log_info(L"HSHELL_APPCOMMAND");
-            break;
-        case HSHELL_GETMINRECT:
-            log_info(L"HSHELL_GETMINRECT");
-            break;
-        case HSHELL_LANGUAGE:
-            log_info(L"HSHELL_LANGUAGE");
-            break;
-        case HSHELL_REDRAW:
-            log_info(L"HSHELL_REDRAW");
-            break;
-        case HSHELL_TASKMAN:
-            log_info(L"HSHELL_TASKMAN");
-            break;
-        case HSHELL_WINDOWACTIVATED:
-            log_info(L"HSHELL_WINDOWACTIVATED");
-            break;
-        case HSHELL_WINDOWCREATED:
-            log_info(L"HSHELL_WINDOWCREATED");
-            break;
-        case HSHELL_WINDOWDESTROYED:
-            log_info(L"HSHELL_WINDOWDESTROYED");
-            break;
-        case HSHELL_WINDOWREPLACED:
-            log_info(L"HSHELL_WINDOWREPLACED");
-            break;
-        default:
-            log_info(s2w("unknown nCode: ") + s2w(to_string(nCode)));
-            break;
-    }
-    return 0;
-}
+// LRESULT CALLBACK MyShellProc(int nCode, WPARAM wParam, LPARAM lParam)
+// {
+//     switch (nCode) {
+//         case HSHELL_ACCESSIBILITYSTATE:
+//             log_info(L"HSHELL_ACCESSIBILITYSTATE");
+//             break;
+//         case HSHELL_ACTIVATESHELLWINDOW:
+//             log_info(L"HSHELL_ACTIVATESHELLWINDOW");
+//             break;
+//         case HSHELL_APPCOMMAND:
+//             log_info(L"HSHELL_APPCOMMAND");
+//             break;
+//         case HSHELL_GETMINRECT:
+//             log_info(L"HSHELL_GETMINRECT");
+//             break;
+//         case HSHELL_LANGUAGE:
+//             log_info(L"HSHELL_LANGUAGE");
+//             break;
+//         case HSHELL_REDRAW:
+//             log_info(L"HSHELL_REDRAW");
+//             break;
+//         case HSHELL_TASKMAN:
+//             log_info(L"HSHELL_TASKMAN");
+//             break;
+//         case HSHELL_WINDOWACTIVATED:
+//             log_info(L"HSHELL_WINDOWACTIVATED");
+//             break;
+//         case HSHELL_WINDOWCREATED:
+//             log_info(L"HSHELL_WINDOWCREATED");
+//             break;
+//         case HSHELL_WINDOWDESTROYED:
+//             log_info(L"HSHELL_WINDOWDESTROYED");
+//             break;
+//         case HSHELL_WINDOWREPLACED:
+//             log_info(L"HSHELL_WINDOWREPLACED");
+//             break;
+//         default:
+//             log_info(s2w("unknown nCode: ") + s2w(to_string(nCode)));
+//             break;
+//     }
+//     return 0;
+// }
 
 LIBTTWWAM_EXPORT int CALLBACK ttwwam_main(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLine, int nCmdShow)
 {
@@ -1093,16 +1096,16 @@ LIBTTWWAM_EXPORT int CALLBACK ttwwam_main(HINSTANCE hInstance, HINSTANCE hPrevIn
     }
 
     // HINSTANCE hi = reinterpret_cast<HINSTANCE>(GetWindowLongPtr(hwndMain, GWLP_HINSTANCE));
-    HMODULE hm = GetModuleHandle(L"libttwwam");
-    if (!hm) {
-        MessageBox(NULL, get_last_error_message().c_str(), L"", MB_OK);
-        return -3;
-    }
-    HHOOK hook = SetWindowsHookEx(WH_SHELL, MyShellProc, hm, 0);
-    if (!hook) {
-        MessageBox(NULL, get_last_error_message().c_str(), L"", MB_OK);
-        return -4;
-    }
+    // HMODULE hm = GetModuleHandle(L"libttwwam");
+    // if (!hm) {
+    //     MessageBox(NULL, get_last_error_message().c_str(), L"", MB_OK);
+    //     return -3;
+    // }
+    // HHOOK hook = SetWindowsHookEx(WH_SHELL, MyShellProc, hm, 0);
+    // if (!hook) {
+    //     MessageBox(NULL, get_last_error_message().c_str(), L"", MB_OK);
+    //     return -4;
+    // }
 
     BOOL ok;
     MSG msg = {0};

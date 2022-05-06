@@ -5,7 +5,11 @@ project (libttwwam CXX)
 set(_sources lib.cpp
              ttwwam.h
             "${PROJECT_BINARY_DIR}/libttwwam_export.h")
-add_library(libttwwam SHARED ${_sources})
-include(GenerateExportHeader)
-generate_export_header(libttwwam)
+
+add_library(libttwwam STATIC ${_sources})
+
+# the dynamic library with auto-generated export declarations
+# add_library(libttwwam SHARED ${_sources})
+# include(GenerateExportHeader)
+# generate_export_header(libttwwam)
 target_include_directories(libttwwam PUBLIC ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR})
